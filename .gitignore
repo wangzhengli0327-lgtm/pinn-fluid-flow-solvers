@@ -1,0 +1,14 @@
+# This repository intentionally publishes only the original solver code.
+*
+
+!.gitignore
+!README.md
+!requirements.txt
+
+!src/
+!src/*.py
+
+!task1_burgers_exact.py
+!task2_burgers_forward.py
+!task3_cavity_Re100.py
+!task4_burgers_inverse.py
