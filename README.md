@@ -1,68 +1,227 @@
-# PINN Fluid Flow Solvers
+# 基于物理信息神经网络的流体流动求解器
 
-Physics-informed neural network (PINN) implementations for nonlinear
-fluid-flow benchmark problems. The repository contains four experiments:
+本项目使用物理信息神经网络求解典型的非线性流体流动问题，覆盖正问题求解、二维不可压缩流动求解和方程参数反演。网络训练同时受到控制方程、初始条件、边界条件和观测数据的约束，因此可以在较少标注数据的条件下学习满足物理规律的近似解。
 
-1. A forward Burgers equation problem with a known exact solution.
-2. A forward one-dimensional Burgers equation problem.
-3. Steady lid-driven cavity flow at Reynolds number 100.
-4. Inverse identification of the diffusion coefficient in the Burgers equation.
+仓库包含四项相互独立的数值实验，并提供统一的网络结构、自动微分、采样、评价和绘图模块。代码支持快速调试、轻量训练和完整训练三种运行规模。
 
-## Repository layout
+## 主要特点
 
-```text
-src/                         Shared models, sampling, gradients, metrics, and plotting
-task1_burgers_exact.py       Burgers equation with an exact solution
-task2_burgers_forward.py     Forward Burgers equation solver
-task3_cavity_Re100.py        Lid-driven cavity PINN solver
-task4_burgers_inverse.py     Inverse Burgers parameter identification
-requirements.txt             Python dependencies
+- 使用自动微分计算控制方程所需的一阶和二阶导数。
+- 将方程残差、初始条件、边界条件和数据误差组合为训练目标。
+- 先使用一阶自适应优化方法训练，再使用有限内存拟牛顿方法精细优化。
+- 支持中央处理器和图形处理器自动选择。
+- 固定随机种子，便于复现实验结果。
+- 自动保存模型权重、训练历史、评价指标和结果图像。
+
+## 四项任务
+
+| 任务 | 研究问题 | 输入与输出 | 是否需要外部数据 | 主要评价内容 |
+| --- | --- | --- | --- | --- |
+| 任务一 | 具有解析解的伯格斯方程正问题 | 输入为位置与时间，输出为速度 | 不需要 | 预测解与解析解的相对二范数误差 |
+| 任务二 | 一维伯格斯方程正问题 | 输入为位置与时间，输出为速度 | 需要参考解 | 预测解与数值参考解的相对二范数误差 |
+| 任务三 | 雷诺数为 100 的稳态顶盖驱动方腔流 | 输入为二维坐标，输出为速度与压力 | 需要速度模参考值 | 预测速度模与参考值的相对二范数误差 |
+| 任务四 | 伯格斯方程扩散系数反演 | 输入为位置与时间，输出为速度和待识别系数 | 需要观测数据 | 系数相对误差与速度场相对二范数误差 |
+
+### 任务一：具有解析解的伯格斯方程
+
+任务一求解带黏性项的一维伯格斯方程：
+
+$$
+\frac{\partial u}{\partial t}
++u\frac{\partial u}{\partial x}
+-\nu\frac{\partial^2u}{\partial x^2}=0.
+$$
+
+计算区域为 $x\in[0,1]$、$t\in[0,1]$，默认雷诺数为 $500$，黏性系数取 $\nu=1/500$。训练目标由方程残差、初始条件和边界条件共同组成。程序内置解析解，不依赖外部数据，可直接比较网络预测与解析结果。
+
+运行后会生成解析解、预测解、绝对误差、不同时间截面的对比曲线、损失曲线和模型权重。
+
+对应程序：
+
+```
+task1_burgers_exact.py
 ```
 
-Generated figures, model checkpoints, training logs, reports, course materials,
-and reference datasets are intentionally excluded.
+### 任务二：一维伯格斯方程正问题
 
-## Installation
+任务二求解经典的一维伯格斯方程，黏性系数为：
 
-Python 3.10 or newer is recommended.
+$$
+\nu=\frac{0.01}{\pi}.
+$$
 
-```bash
+计算区域为 $x\in[-1,1]$、$t\in[0,1]$，初始条件为：
+
+$$
+u(x,0)=-\sin(\pi x).
+$$
+
+左右边界满足周期条件，速度和速度对空间的一阶导数在两端保持一致。参考数据默认用于结果评价；添加 `--use-data` 参数后，也可从参考数据中采样监督点参与训练。
+
+运行后会生成参考解、预测解、绝对误差、不同时间截面的对比曲线、损失曲线和模型权重。
+
+对应程序：
+
+```
+task2_burgers_forward.py
+```
+
+### 任务三：稳态顶盖驱动方腔流
+
+任务三求解单位方腔内雷诺数为 $100$ 的二维稳态不可压缩流动。控制方程包括连续性方程和两个方向的动量方程：
+
+$$
+\frac{\partial u}{\partial x}+\frac{\partial v}{\partial y}=0,
+$$
+
+$$
+u\frac{\partial u}{\partial x}
++v\frac{\partial u}{\partial y}
++\frac{\partial p}{\partial x}
+-\frac{1}{Re}\left(
+\frac{\partial^2u}{\partial x^2}
++\frac{\partial^2u}{\partial y^2}
+\right)=0,
+$$
+
+$$
+u\frac{\partial v}{\partial x}
++v\frac{\partial v}{\partial y}
++\frac{\partial p}{\partial y}
+-\frac{1}{Re}\left(
+\frac{\partial^2v}{\partial x^2}
++\frac{\partial^2v}{\partial y^2}
+\right)=0.
+$$
+
+方腔顶部以单位速度向右运动，其余壁面满足无滑移条件，并在原点设置压力参考值。网络同时预测两个速度分量和压力。参考数据用于评价速度模；添加 `--use-speed-data` 参数后，也可使用速度模观测值辅助训练。
+
+运行后会生成速度分量、压力、速度模、绝对误差、速度矢量、流线、损失曲线和模型权重。
+
+对应程序：
+
+```
+task3_cavity_Re100.py
+```
+
+### 任务四：伯格斯方程参数反演
+
+任务四根据离散观测数据反演伯格斯方程中的未知扩散系数：
+
+$$
+\frac{\partial u}{\partial t}
++u\frac{\partial u}{\partial x}
+-\lambda\frac{\partial^2u}{\partial x^2}=0.
+$$
+
+网络一边拟合速度观测值，一边通过方程残差约束速度场，并把 $\lambda$ 作为可训练参数共同优化。程序通过正值映射保证识别出的扩散系数始终大于零，参考真值为：
+
+$$
+\lambda_{\text{真实值}}=\frac{0.01}{\pi}.
+$$
+
+运行后会生成参考解、预测解、绝对误差、不同时间截面的对比曲线、损失与系数收敛曲线、模型权重和系数识别指标。
+
+对应程序：
+
+```
+task4_burgers_inverse.py
+```
+
+## 项目结构
+
+```
+src/
+├── data_utils.py            数据读取、张量转换和分批预测
+├── gradients.py             自动微分封装
+├── metrics.py               均方误差和相对二范数误差
+├── models.py                全连接神经网络与随机种子设置
+├── plot_utils.py            标量场、剖面、矢量场和流线绘制
+├── sampling.py              区域、初始点和边界点采样
+└── train_utils.py           设备选择、训练历史和结果保存
+
+task1_burgers_exact.py       任务一入口
+task2_burgers_forward.py     任务二入口
+task3_cavity_Re100.py        任务三入口
+task4_burgers_inverse.py     任务四入口
+requirements.txt             运行依赖清单
+```
+
+本仓库仅收录原创代码和运行说明，不包含生成的图像、模型权重、训练日志、报告、课程资料及参考数据集。
+
+## 环境安装
+
+建议使用 3.10 或更高版本的编程语言解释器。
+
+```
 python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-Install a CUDA-enabled PyTorch build separately if GPU acceleration is required.
+如需使用图形处理器加速，请根据设备环境另行安装与本机驱动匹配的深度学习框架版本。
 
-## Reference data
+## 参考数据
 
-Tasks 2, 3, and 4 use external reference datasets for evaluation or supervised
-samples. Place the following files in a local `data/` directory:
+任务二和任务四使用同一份伯格斯方程参考解，任务三使用方腔流速度模参考值。请在项目根目录创建 `data/` 目录，并放入：
 
-```text
+```
 data/Burgers_star_data.txt
 data/Cavity_star_data_Re100.txt
 ```
 
-Each text file must contain a header followed by at least three numeric columns.
-The datasets are not distributed in this repository.
+每个文件都应包含一行表头以及至少三列数值数据：
 
-## Usage
+- 伯格斯方程数据的三列依次为位置、时间和速度。
+- 方腔流数据的三列依次为横坐标、纵坐标和速度模。
 
-Run a short smoke-training configuration:
+数据集不随仓库分发。运行任务二、任务三或任务四前，请自行准备相应数据，并可通过 `--data` 参数指定其他存放位置。
 
-```bash
+## 快速运行
+
+调试模式使用较少的采样点和训练轮数，适合检查环境、数据路径和程序流程：
+
+```
 python task1_burgers_exact.py --mode debug
 python task2_burgers_forward.py --mode debug
 python task3_cavity_Re100.py --mode debug
 python task4_burgers_inverse.py --mode debug
 ```
 
-Tasks 2–4 require their corresponding reference data files. Use `--help` on any
-script to inspect its available training and data options:
+三种运行规模分别为：
 
-```bash
+- `debug`：快速检查程序是否可以运行。
+- `light`：以较低计算成本进行较完整的训练。
+- `full`：使用更大的采样规模和训练轮数获得最终结果。
+
+查看任一程序支持的参数：
+
+```
 python task3_cavity_Re100.py --help
 ```
 
-Training outputs are written locally to `figures/`, `checkpoints/`, and `logs/`;
-these generated directories are ignored by Git.
+## 结果输出
+
+程序会自动创建以下目录：
+
+| 目录 | 内容 |
+| --- | --- |
+| `figures/` | 预测场、误差场、剖面对比、损失曲线、矢量图和流线图 |
+| `checkpoints/` | 训练后的模型权重和反演参数 |
+| `logs/` | 训练历史、最终评价指标和运行配置 |
+
+这些目录属于训练生成内容，不纳入版本管理。
+
+## 复现说明
+
+- 默认随机种子为 `2024`，可通过 `--seed` 修改。
+- 默认运行规模为 `debug`，正式实验建议选择 `light` 或 `full`。
+- 训练耗时取决于运行规模、采样点数量、训练轮数和计算设备。
+- 不同硬件和深度学习框架版本可能产生轻微数值差异。
+
+## 参与改进
+
+欢迎通过仓库的议题功能报告问题、提出建议，也欢迎提交合并请求改进算法、文档或实验配置。提交修改前，请确认代码能够通过基本语法检查，并避免上传数据集、模型权重、日志和大体积生成文件。
+
+## 许可说明
+
+当前仓库尚未附加开源许可证。如需复制、修改或重新分发代码，请先与仓库作者联系。
