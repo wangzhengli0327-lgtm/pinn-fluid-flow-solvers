@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "如果本软件对你的研究或学习有帮助，请引用本项目。"
+title: "基于物理信息神经网络的流体流动求解器"
+type: software
+authors:
+  - name: "流年不觉"
+repository-code: "https://github.com/wangzhengli0327-lgtm/pinn-fluid-flow-solvers"
+url: "https://github.com/wangzhengli0327-lgtm/pinn-fluid-flow-solvers"
+version: 0.1.0
+date-released: 2026-07-29
+license: MIT
+abstract: "使用物理信息神经网络求解伯格斯方程、顶盖驱动方腔流和扩散系数反演问题的 PyTorch 实现。"
+keywords:
+  - "物理信息神经网络"
+  - "计算流体力学"
+  - "伯格斯方程"
+  - "顶盖驱动方腔流"
+  - "参数反演"
