@@ -3,10 +3,28 @@
 
 !.gitignore
 !README.md
+!README_EN.md
+!CONTRIBUTING.md
+!CHANGELOG.md
+!CITATION.cff
+!LICENSE
 !requirements.txt
 
 !src/
 !src/*.py
+
+!scripts/
+!scripts/*.py
+
+!data/
+data/*
+!data/README.md
+
+!assets/
+!assets/**
+
+!.github/
+!.github/**
 
 !task1_burgers_exact.py
 !task2_burgers_forward.py
